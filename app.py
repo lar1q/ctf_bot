@@ -9,8 +9,8 @@ from starlette.responses import Response
 import uvicorn
 
 
-BOT_TOKEN = os.getenv("TOKEN")
-ADMIN_CHAT_ID = int(os.getenv("ID", "0"))
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
 PORT = int(os.getenv("PORT", "8080"))
 
 logging.basicConfig(level=logging.INFO)
