@@ -8,16 +8,16 @@ from starlette.requests import Request
 from starlette.responses import Response
 import uvicorn
 
-# Настройки
+
 BOT_TOKEN = os.getenv("8604697648:AAFb75wbTYl0wTKfG7dl8wWduOvX-5ODNlk")
 ADMIN_CHAT_ID = int(os.getenv("5253095009", "0"))
 PORT = int(os.getenv("PORT", "8080"))
 
 logging.basicConfig(level=logging.INFO)
 
-# --- Логика бота ---
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Приветствие только в личных чатах
+    
     if update.effective_chat.type != "private":
         return
     await update.message.reply_text(
@@ -26,7 +26,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Игнорируем всё, кроме личных сообщений
+    
     if update.effective_chat.type != "private":
         return
 
@@ -35,7 +35,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.username if user.username else "Без username"
     user_id = user.id
 
-    # Проверка формата
+    
     if not re.match(r"^.+?\s+-\s+.+$", text):
         await update.message.reply_text(
             "❌ Неверный формат!\nПожалуйста, оформите ответ строго по шаблону:\n"
@@ -43,19 +43,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Подтверждение пользователю
+    
     await update.message.reply_text(
         "✅ Спасибо за ответ! Ваше сообщение было отправлено администратору."
     )
 
-    # Отправка администратору (в группу или лично)
+    
     admin_message = f"📨 Новый ответ от @{username} (id: {user_id}):\n└ {text}"
     try:
         await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_message)
     except Exception as e:
         logging.error(f"Не удалось отправить сообщение админу: {e}")
 
-# --- Веб-сервер для Render (webhook) ---
+
 app = Starlette(debug=True)
 ptb_app = Application.builder().token(BOT_TOKEN).build()
 
@@ -80,6 +80,6 @@ async def on_startup():
 async def telegram_webhook(request: Request):
     return await webhook(request)
 
-# --- Запуск ---
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=PORT)
