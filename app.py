@@ -1,22 +1,30 @@
 import os
-import logging
 import re
-import asyncio
-from telegram import Update
+import logging
+from fastapi import FastAPI, Request, Response
+from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import uvicorn
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
+PORT = int(os.getenv("PORT", "8080"))
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
+
+fastapi_app = FastAPI()
+
+
+telegram_app = Application.builder().token(BOT_TOKEN).build()
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type != "private":
         return
     await update.message.reply_text(
         "Для отправки ответа оформите:\n[название кейса][номер кейса] - [ваш ответ]\n\n"
-        "Пример: Web#1 - flag{test_flag}"
+        "Пример: Web1 - flag{test_flag}"
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -30,29 +38,41 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not re.match(r"^.+?\s+-\s+.+$", text):
         await update.message.reply_text(
             "❌ Неверный формат!\nПожалуйста, оформите ответ строго по шаблону:\n"
-            "[название кейса][номер кейса] - [ваш ответ]\nПример: Web#1 - flag{123}"
+            "[название кейса][номер кейса] - [ваш ответ]\nПример: Web1 - flag{123}"
         )
         return
 
     await update.message.reply_text(
         "✅ Спасибо за ответ! Ваше сообщение было отправлено администратору."
     )
-
     admin_message = f"📨 Новый ответ от @{username} (id: {user_id}):\n└ {text}"
     try:
         await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_message)
     except Exception as e:
-        logger.error(f"Не удалось отправить сообщение админу: {e}")
+        logging.error(f"Не удалось отправить админу: {e}")
 
-async def main():
-    if not BOT_TOKEN or ADMIN_CHAT_ID == 0:
-        logger.error("Не заданы BOT_TOKEN или ADMIN_CHAT_ID")
-        return
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    logger.info("Бот запущен (polling)...")
-    await app.run_polling()
+
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+
+@fastapi_app.post("/webhook")
+async def webhook(request: Request):
+    data = await request.json()
+    update = Update.de_json(data, telegram_app.bot)
+    await telegram_app.process_update(update)
+    return Response(content="ok")
+
+@fastapi_app.on_event("startup")
+async def on_startup():
+    
+    webhook_url = f"https://{os.environ['RENDER_EXTERNAL_NAME']}/webhook"
+    await telegram_app.bot.set_webhook(url=webhook_url)
+    logging.info("Webhook установлен")
+
+@fastapi_app.on_event("shutdown")
+async def on_shutdown():
+    await telegram_app.shutdown()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    uvicorn.run(fastapi_app, host="0.0.0.0", port=PORT)
